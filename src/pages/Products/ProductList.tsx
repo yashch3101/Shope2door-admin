@@ -12,6 +12,7 @@ interface Product {
   stock: number;
   unit?: string;
   weight?: string;
+  categoryId: string;
   isActive: boolean;
   isFeatured?: boolean;
   isEssential?: boolean;
@@ -22,6 +23,7 @@ const API_BASE_URL = 'https://drop-down-underwire-impulse.ngrok-free.dev/api/v1'
 
 export default function ProductList() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
@@ -38,6 +40,7 @@ export default function ProductList() {
     mrp: 0,
     stock: 0,
     weight: '',
+    categoryId: '',
     image: '',
     isActive: true,
     isFeatured: false,
@@ -71,8 +74,28 @@ export default function ProductList() {
     }
   };
 
+  // =====================================================
+  // FETCH CATEGORIES FOR DROPDOWN
+  // =====================================================
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('/categories/admin/all');
+      const resData = response.data;
+      let items = [];
+      if (resData?.data && Array.isArray(resData.data)) {
+        items = resData.data;
+      } else if (Array.isArray(resData)) {
+        items = resData;
+      }
+      setCategories(items);
+    } catch (error) {
+      console.error("Failed to fetch categories for product modal", error);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
+    fetchCategories();
   }, []);
 
   // =====================================================
@@ -84,6 +107,10 @@ export default function ProductList() {
       toast.error('Product name is required');
       return;
     }
+    if (!formData.categoryId) {
+      toast.error('Please select a category/sub-category');
+      return;
+    }
 
     const payload = {
       name: formData.name,
@@ -92,6 +119,7 @@ export default function ProductList() {
       mrp: Number(formData.mrp),
       stock: Number(formData.stock),
       weight: formData.weight,
+      categoryId: formData.categoryId,
       isActive: formData.isActive,
       isFeatured: formData.isFeatured,
       isEssential: formData.isEssential,
@@ -144,6 +172,7 @@ export default function ProductList() {
       mrp: product.mrp || 0,
       stock: product.stock || 0,
       weight: product.weight || product.unit || '',
+      categoryId: product.categoryId || '',
       image: (product.images && product.images.length > 0) ? product.images[0] : '',
       isActive: product.isActive !== false,
       isFeatured: product.isFeatured || false,
@@ -154,7 +183,7 @@ export default function ProductList() {
 
   const openNewModal = () => {
     setEditingId(null);
-    setFormData({ name: '', sku: '', price: 0, mrp: 0, stock: 0, weight: '', image: '', isActive: true, isFeatured: false, isEssential: false });
+    setFormData({ name: '', sku: '', price: 0, mrp: 0, stock: 0, weight: '', categoryId: '', image: '', isActive: true, isFeatured: false, isEssential: false });
     setIsModalOpen(true);
   };
 
@@ -295,6 +324,25 @@ export default function ProductList() {
 
             <div className="overflow-y-auto p-6">
               <form id="productForm" onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                {/* Category Dropdown Selection */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Select Category / Sub-Category</label>
+                  <select
+                    value={formData.categoryId}
+                    onChange={(e) => setFormData({...formData, categoryId: e.target.value})}
+                    required
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none bg-white"
+                  >
+                    <option value="">-- Choose Category --</option>
+                    {categories.map((cat: any) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.parentId ? `↳ ${cat.name} (Sub-Category)` : cat.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Product ko kis sub-category (jaise Burgers) mein daalna hai yahan se select karein.</p>
+                </div>
                 
                 {/* Product Name - Full Width */}
                 <div className="md:col-span-2">

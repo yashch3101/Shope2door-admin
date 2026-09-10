@@ -10,6 +10,8 @@ import Dashboard from './pages/Dashboard/Dashboard';
 import CouponList from './pages/Coupons/CouponList';
 import BannerList from './pages/Banners/BannerList';
 import Settings from './pages/Settings/Settings';
+import OrderInvoice from './pages/Orders/OrderInvoice';
+import LocationManagement from './pages/Location/LocationManagement';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('accessToken');
@@ -37,6 +39,8 @@ export default function App() {
           <Route path="coupons" element={<CouponList />} />
           <Route path="banners" element={<BannerList />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="orders/:id/invoice" element={<OrderInvoice />} />
+          <Route path="location" element={<LocationManagement />} />
           {/* Baaki 30+ routes yahan aayenge aage chal kar */}
         </Route>
 

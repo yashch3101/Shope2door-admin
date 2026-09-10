@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Search, Eye } from 'lucide-react';
+import { Search, Eye, Printer } from 'lucide-react';
 import { api } from '../../services/api';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 interface Order {
   id: string;
@@ -14,6 +15,9 @@ interface Order {
 }
 
 export default function OrderList() {
+
+  const navigate = useNavigate();
+
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -62,7 +66,6 @@ export default function OrderList() {
       const response = await api.patch(`/orders/admin/${orderId}/status`, { status: newStatus });
       if(response.data.success) {
          toast.success(`Order marked as ${newStatus}`);
-         // UI ko instantly update kar do bina reload kiye
          setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
       }
     } catch (error: any) {
@@ -92,7 +95,7 @@ export default function OrderList() {
       </div>
 
       {/* Filters & Search */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4 no-print">
         <div className="relative flex-1">
           <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
           <input 
@@ -114,8 +117,8 @@ export default function OrderList() {
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Order ID & Date</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Customer</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Amount</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider no-print">Status</th>
+                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider no-print">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -141,7 +144,7 @@ export default function OrderList() {
                     <td className="px-6 py-4">
                       <div className="text-sm font-bold text-gray-900">₹{order.total}</div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 no-print">
                       <select 
                         value={order.status}
                         onChange={(e) => handleStatusUpdate(order.id, e.target.value)}
@@ -155,9 +158,19 @@ export default function OrderList() {
                         ))}
                       </select>
                     </td>
-                    <td className="px-6 py-4 text-right text-sm font-medium space-x-3">
+                    <td className="px-6 py-4 text-right text-sm font-medium space-x-4 no-print">
+                      {/* Generate Bill Button */}
+                      <button 
+                        onClick={() => navigate(`/orders/${order.id}/invoice`)} 
+                        className="text-green-600 hover:text-green-900 transition-colors" 
+                        title="Generate Bill / Print Invoice"
+                      >
+                        <Printer className="w-5 h-5 inline-block" />
+                      </button>
+                      
+                      {/* Existing View Details Button */}
                       <button className="text-gray-600 hover:text-indigo-900 transition-colors" title="View Details">
-                        <Eye className="w-5 h-5" />
+                        <Eye className="w-5 h-5 inline-block" />
                       </button>
                     </td>
                   </tr>

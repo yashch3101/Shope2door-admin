@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, Upload } from 'lucide-react';
 import { api } from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -9,6 +9,7 @@ interface Category {
   slug: string;
   icon?: string;
   isActive: boolean;
+  parentId?: string | null;
 }
 
 export default function CategoryList() {
@@ -20,6 +21,7 @@ export default function CategoryList() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -27,6 +29,7 @@ export default function CategoryList() {
     slug: '',
     icon: '',
     isActive: true,
+    parentId: '',
   });
 
   // =====================================================
@@ -67,6 +70,110 @@ export default function CategoryList() {
     setFormData({ ...formData, name, slug });
   };
 
+  // Filter only main categories for parent selection
+  const parentCategories = Array.isArray(categories) 
+    ? categories.filter(c => !c.parentId) 
+    : [];
+
+  // =====================================================
+  // IMAGE COMPRESSION & UPLOAD HELPER (< 100KB)
+  // =====================================================
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    try {
+      // 1. Compression logic (< 100KB)
+      const compressedFile = await compressImage(file, 100 * 1024); // target 100KB
+
+      // 2. Upload to backend
+      const uploadData = new FormData();
+      uploadData.append('file', compressedFile);
+
+      // Assuming your backend upload endpoint is /upload or /categories/upload
+      const response = await api.post('/categories/upload', uploadData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      // Adjust based on your backend response structure (e.g., response.data.url or path)
+      const imageUrl = response.data?.url || response.data?.path || response.data;
+      setFormData(prev => ({ ...prev, icon: imageUrl }));
+      toast.success('Image uploaded & compressed successfully!');
+    } catch (error: any) {
+      console.error('Upload error', error);
+      toast.error(error?.response?.data?.message || 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  // Canvas-based image compressor
+  const compressImage = (file: File, maxSizeInBytes: number): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Resize if too large
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          let quality = 0.9;
+          const evaluateQuality = () => {
+            canvas.toBlob(
+              (blob) => {
+                if (!blob) {
+                  reject(new Error('Canvas is empty'));
+                  return;
+                }
+                if (blob.size <= maxSizeInBytes || quality <= 0.1) {
+                  const compressedFile = new File([blob], file.name, {
+                    type: 'image/jpeg',
+                    lastModified: Date.now(),
+                  });
+                  resolve(compressedFile);
+                } else {
+                  quality -= 0.1;
+                  evaluateQuality();
+                }
+              },
+              'image/jpeg',
+              quality
+            );
+          };
+          evaluateQuality();
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
   // =====================================================
   // SUBMIT (CREATE / UPDATE)
   // =====================================================
@@ -79,13 +186,16 @@ export default function CategoryList() {
 
     try {
       setIsSubmitting(true);
+      const payload = {
+        ...formData,
+        parentId: formData.parentId === '' ? null : formData.parentId,
+      };
+
       if (editingId) {
-        // UPDATE (Backend route is /categories/:id)
-        await api.patch(`/categories/${editingId}`, formData);
+        await api.patch(`/categories/${editingId}`, payload);
         toast.success('Category updated successfully');
       } else {
-        // CREATE (Backend route is /categories)
-        await api.post('/categories', formData);
+        await api.post('/categories', payload);
         toast.success('Category created successfully');
       }
       setIsModalOpen(false);
@@ -123,13 +233,14 @@ export default function CategoryList() {
       slug: category.slug,
       icon: category.icon || '',
       isActive: category.isActive !== false,
+      parentId: category.parentId || '',
     });
     setIsModalOpen(true);
   };
 
   const openNewModal = () => {
     setEditingId(null);
-    setFormData({ name: '', slug: '', icon: '', isActive: true });
+    setFormData({ name: '', slug: '', icon: '', isActive: true, parentId: '' });
     setIsModalOpen(true);
   };
 
@@ -192,13 +303,15 @@ export default function CategoryList() {
                       <div className="flex items-center">
                         <div className="h-12 w-12 flex-shrink-0 bg-gray-50 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
                           {category.icon ? (
-                            <img src={category.icon} alt={category.name} className="h-full w-full object-contain p-1" />
+                            <img src={category.icon.startsWith('http') ? category.icon : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${category.icon}`} alt={category.name} className="h-full w-full object-contain p-1" />
                           ) : (
                             <span className="text-gray-400 text-xs">No img</span>
                           )}
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-bold text-gray-900">{category.name}</div>
+                          <div className="text-sm font-bold text-gray-900">
+                            {category.parentId ? `↳ ` : ''}{category.name}
+                          </div>
                           <div className="text-xs text-gray-500 mt-1">/{category.slug}</div>
                         </div>
                       </div>
@@ -270,16 +383,57 @@ export default function CategoryList() {
                 />
               </div>
 
+              {/* Parent Category Dropdown */}
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Icon URL (SVG / Image Link)</label>
-                <input 
-                  type="text" 
-                  value={formData.icon}
-                  onChange={(e) => setFormData({...formData, icon: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none"
-                  placeholder="https://example.com/icon.svg"
-                />
-                <p className="text-xs text-gray-500 mt-1">Paste a valid URL for the category icon. Must start with http/https.</p>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Parent Category (Optional)</label>
+                <select
+                  value={formData.parentId}
+                  onChange={(e) => setFormData({ ...formData, parentId: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none bg-white"
+                >
+                  <option value="">None (Make this a Main Category)</option>
+                  {parentCategories.map(cat => (
+                    cat.id !== editingId && (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    )
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Select a main category if you want to make this a Sub-Category.</p>
+              </div>
+
+              {/* Direct File Upload instead of raw text URL */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Category Icon / Image</label>
+                <div className="flex items-center gap-3">
+                  <label className="flex-1 flex flex-col items-center justify-center px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-yellow-500 bg-gray-50 transition-colors">
+                    <div className="flex items-center space-x-2">
+                      <Upload className="w-5 h-5 text-gray-400" />
+                      <span className="text-sm font-medium text-gray-600">
+                        {uploadingImage ? 'Compressing & Uploading...' : 'Choose image file (< 100KB)'}
+                      </span>
+                    </div>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleImageUpload} 
+                      className="hidden" 
+                      disabled={uploadingImage}
+                    />
+                  </label>
+                </div>
+                {formData.icon && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <img 
+                      src={formData.icon.startsWith('http') ? formData.icon : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${formData.icon}`} 
+                      alt="Preview" 
+                      className="w-10 h-10 object-contain rounded border" 
+                    />
+                    <span className="text-xs text-green-600 font-medium">Image uploaded successfully!</span>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">Select an image from your computer; it will automatically compress under 100KB.</p>
               </div>
 
               <div className="flex items-center mt-2">
@@ -305,7 +459,7 @@ export default function CategoryList() {
                 </button>
                 <button 
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || uploadingImage}
                   className="flex-1 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-bold transition-colors disabled:opacity-50"
                 >
                   {isSubmitting ? 'Saving...' : 'Save Category'}

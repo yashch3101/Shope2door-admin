@@ -1,45 +1,59 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, ImageIcon } from 'lucide-react';
+import { Plus, Trash2, ImageIcon, Link as LinkIcon } from 'lucide-react';
 import { api } from '../../services/api';
 import toast from 'react-hot-toast';
+
+interface Category {
+  id: string;
+  name: string;
+}
 
 interface Banner {
   id: string;
   image: string;
   isActive: boolean;
   sortOrder: number;
+  category?: {
+    id: string;
+    name: string;
+    slug: string;
+  };
 }
 
 export default function BannerList() {
   const [banners, setBanners] = useState<Banner[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  
   const [image, setImage] = useState('');
   const [sortOrder, setSortOrder] = useState('0');
+  const [categoryId, setCategoryId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchBanners = async () => {
+  const fetchBannersAndCategories = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/banners');
-      const resData = response.data;
-      let items: Banner[] = [];
-      if (resData?.data && Array.isArray(resData.data)) {
-        items = resData.data;
-      } else if (Array.isArray(resData)) {
-        items = resData;
-      }
-      setBanners(items);
+      // Fetch Banners
+      const bannerRes = await api.get('/banners');
+      let bannerItems = bannerRes.data?.data || bannerRes.data || [];
+      setBanners(Array.isArray(bannerItems) ? bannerItems : []);
+
+      // Fetch Categories for Dropdown
+      const catRes = await api.get('/categories');
+      let catItems = catRes.data?.data || catRes.data || [];
+      setCategories(Array.isArray(catItems) ? catItems : []);
+
     } catch (error) {
-      console.error("Failed to fetch banners", error);
-      toast.error('Failed to load banners');
+      console.error("Failed to fetch data", error);
+      toast.error('Failed to load data');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchBanners();
+    fetchBannersAndCategories();
   }, []);
 
   const handleCreateBanner = async (e: React.FormEvent) => {
@@ -55,12 +69,15 @@ export default function BannerList() {
         image: image.trim(),
         sortOrder: Number(sortOrder) || 0,
         isActive: true,
+        // Agar category select ki hai toh bhejenge, warna undefined
+        categoryId: categoryId ? categoryId : undefined, 
       });
       toast.success('Banner created successfully!');
       setImage('');
       setSortOrder('0');
+      setCategoryId('');
       setShowAddModal(false);
-      fetchBanners();
+      fetchBannersAndCategories();
     } catch (error: any) {
       console.error('Failed to create banner', error);
       toast.error(error?.response?.data?.message || 'Failed to create banner');
@@ -75,7 +92,7 @@ export default function BannerList() {
     try {
       await api.delete(`/banners/${id}`);
       toast.success('Banner deleted successfully');
-      fetchBanners();
+      fetchBannersAndCategories();
     } catch (error) {
       console.error('Failed to delete banner', error);
       toast.error('Failed to delete banner');
@@ -110,17 +127,35 @@ export default function BannerList() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Sort Order (Position)</label>
-              <input 
-                type="number" 
-                placeholder="0" 
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500"
-              />
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Link to Category (Optional)</label>
+                <select 
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500 bg-white"
+                >
+                  <option value="">No Link (Display Only)</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Sort Order (Position)</label>
+                <input 
+                  type="number" 
+                  placeholder="0" 
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-yellow-500 focus:border-yellow-500"
+                />
+              </div>
             </div>
-            <div className="flex justify-end space-x-3">
+
+            <div className="flex justify-end space-x-3 mt-2">
               <button 
                 type="button" 
                 onClick={() => setShowAddModal(false)}
@@ -147,8 +182,8 @@ export default function BannerList() {
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Banner Image</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Linked Category</th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Sort Order</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -178,13 +213,18 @@ export default function BannerList() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                        #{banner.sortOrder || 0}
-                      </span>
+                      {banner.category ? (
+                        <div className="flex items-center text-sm text-indigo-600 font-medium">
+                          <LinkIcon className="w-4 h-4 mr-1.5" />
+                          {banner.category.name}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">None</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                        Active
+                      <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                        #{banner.sortOrder || 0}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right text-sm font-medium">
