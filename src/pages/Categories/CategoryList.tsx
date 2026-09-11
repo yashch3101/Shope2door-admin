@@ -8,9 +8,17 @@ interface Category {
   name: string;
   slug: string;
   icon?: string;
+  image?: string;
   isActive: boolean;
   parentId?: string | null;
 }
+
+const getAdminImageUrl = (path?: string | null) => {
+  if (!path) return '';
+  if (path.startsWith('http')) return path.replace(/\s+/g, '%20');
+  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+  return `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${cleanPath}`.replace(/\s+/g, '%20');
+};
 
 export default function CategoryList() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -280,19 +288,22 @@ export default function CategoryList() {
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         <div className="h-12 w-12 flex-shrink-0 bg-gray-50 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
-                          {category.icon ? (
-                            <img 
-                              src={category.icon.startsWith('http') ? category.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${category.icon.replace(/\s+/g, '%20')}`} 
-                              alt={category.name} 
-                              className="h-full w-full object-contain p-1"
-                              onError={(e) => {
-                                // Agar image block hoti hai (jaise pehli baar ngrok link kholne se pehle)
-                                (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${category.name}&background=f3f4f6&color=9ca3af`;
-                              }}
-                            />
-                          ) : (
-                            <span className="text-gray-400 text-xs">No img</span>
-                          )}
+                          {(() => {
+                            const imgPath = category.icon || (category as any).image;
+                            if (imgPath) {
+                              return (
+                                <img 
+                                  src={getAdminImageUrl(imgPath)} 
+                                  alt={category.name} 
+                                  className="h-full w-full object-contain p-1"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${category.name}&background=f3f4f6&color=9ca3af`;
+                                  }}
+                                />
+                              );
+                            }
+                            return <span className="text-gray-400 text-xs">No img</span>;
+                          })()}
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-bold text-gray-900">
@@ -410,9 +421,9 @@ export default function CategoryList() {
                 {(localPreview || formData.icon) && (
                   <div className="mt-2 flex items-center gap-2">
                     <img 
-                      src={localPreview || (formData.icon.startsWith('http') ? formData.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${formData.icon.replace(/\s+/g, '%20')}`)} 
+                      src={localPreview || getAdminImageUrl(formData.icon)} 
                       alt="Preview" 
-                      className="w-10 h-10 object-contain rounded border" 
+                      className="w-10 h-10 object-contain rounded border bg-gray-50" 
                     />
                     <span className="text-xs text-green-600 font-medium">Image uploaded successfully!</span>
                   </div>
