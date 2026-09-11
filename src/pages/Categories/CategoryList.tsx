@@ -3,35 +3,25 @@ import { Plus, Edit, Trash2, Search, X, Upload } from 'lucide-react';
 import { api } from '../../services/api';
 import toast from 'react-hot-toast';
 
-const NgrokImage = ({ src, alt, className }: { src: string, alt?: string, className?: string }) => {
-  const [imgBlob, setImgBlob] = useState<string>('');
-  const [error, setError] = useState(false);
+// YEH APP KE 'NgrokSvg' KA WEB VERSION HAI JO WARNING BYPASS KAREGA
+const NgrokWebImage = ({ src, alt, className }: { src: string, alt?: string, className?: string }) => {
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
 
   useEffect(() => {
     if (!src) return;
-    
     if (!src.includes('ngrok-free.dev')) {
-      setImgBlob(src);
+      setImgSrc(src);
       return;
     }
-
-    fetch(src, {
-      headers: { 'ngrok-skip-browser-warning': 'true' }
-    })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed');
-        return res.blob();
-      })
-      .then(blob => {
-        setImgBlob(URL.createObjectURL(blob));
-      })
-      .catch(() => setError(true));
+    // Fetch use karke secretly header bhejenge
+    fetch(src, { headers: { 'ngrok-skip-browser-warning': 'true' } })
+      .then(res => res.blob())
+      .then(blob => setImgSrc(URL.createObjectURL(blob)))
+      .catch(() => setImgSrc(null));
   }, [src]);
 
-  if (error || !imgBlob) {
-    return <div className={`flex items-center justify-center bg-gray-100 text-gray-400 text-xs ${className}`}>No Img</div>;
-  }
-  return <img src={imgBlob} alt={alt} className={className} />;
+  if (!imgSrc) return <div className={`flex items-center justify-center bg-gray-100 text-gray-400 text-xs ${className}`}>No img</div>;
+  return <img src={imgSrc} alt={alt} className={className} />;
 };
 
 interface Category {
@@ -334,7 +324,7 @@ export default function CategoryList() {
                       <div className="flex items-center">
                         <div className="h-12 w-12 flex-shrink-0 bg-gray-50 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
                           {category.icon ? (
-                            <NgrokImage 
+                            <NgrokWebImage 
                               src={category.icon.startsWith('http') ? category.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${category.icon.replace(/\s+/g, '%20')}`} 
                               alt={category.name} 
                               className="h-full w-full object-contain p-1" 
@@ -460,10 +450,10 @@ export default function CategoryList() {
                 </div>
                 {formData.icon && (
                   <div className="mt-2 flex items-center gap-2">
-                    <NgrokImage 
+                    <NgrokWebImage 
                       src={formData.icon.startsWith('http') ? formData.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${formData.icon.replace(/\s+/g, '%20')}`} 
                       alt="Preview" 
-                      className="w-10 h-10 object-contain rounded border" 
+                      className="w-10 h-10 object-contain rounded border bg-white" 
                     />
                     <span className="text-xs text-green-600 font-medium">Image uploaded successfully!</span>
                   </div>
