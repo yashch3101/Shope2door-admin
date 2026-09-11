@@ -3,27 +3,6 @@ import { Plus, Edit, Trash2, Search, X, Upload } from 'lucide-react';
 import { api } from '../../services/api';
 import toast from 'react-hot-toast';
 
-// YEH APP KE 'NgrokSvg' KA WEB VERSION HAI JO WARNING BYPASS KAREGA
-const NgrokWebImage = ({ src, alt, className }: { src: string, alt?: string, className?: string }) => {
-  const [imgSrc, setImgSrc] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!src) return;
-    if (!src.includes('ngrok-free.dev')) {
-      setImgSrc(src);
-      return;
-    }
-    // Fetch use karke secretly header bhejenge
-    fetch(src, { headers: { 'ngrok-skip-browser-warning': 'true' } })
-      .then(res => res.blob())
-      .then(blob => setImgSrc(URL.createObjectURL(blob)))
-      .catch(() => setImgSrc(null));
-  }, [src]);
-
-  if (!imgSrc) return <div className={`flex items-center justify-center bg-gray-100 text-gray-400 text-xs ${className}`}>No img</div>;
-  return <img src={imgSrc} alt={alt} className={className} />;
-};
-
 interface Category {
   id: string;
   name: string;
@@ -43,6 +22,7 @@ export default function CategoryList() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -53,9 +33,6 @@ export default function CategoryList() {
     parentId: '',
   });
 
-  // =====================================================
-  // FETCH CATEGORIES
-  // =====================================================
   const fetchCategories = async () => {
     try {
       setLoading(true);
@@ -82,56 +59,46 @@ export default function CategoryList() {
     fetchCategories();
   }, []);
 
-  // =====================================================
-  // AUTO GENERATE SLUG
-  // =====================================================
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
     setFormData({ ...formData, name, slug });
   };
 
-  // Filter only main categories for parent selection
   const parentCategories = Array.isArray(categories) 
     ? categories.filter(c => !c.parentId) 
     : [];
 
-  // =====================================================
-  // IMAGE COMPRESSION & UPLOAD HELPER (< 100KB)
-  // =====================================================
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploadingImage(true);
     try {
-      // 1. Compression logic (< 100KB)
-      const compressedFile = await compressImage(file, 100 * 1024); // target 100KB
+      const compressedFile = await compressImage(file, 100 * 1024); 
+      
+      // Upload hote hi instant preview dikhane ke liye
+      setLocalPreview(URL.createObjectURL(compressedFile));
 
-      // 2. Upload to backend
       const uploadData = new FormData();
       uploadData.append('file', compressedFile);
 
-      // Assuming your backend upload endpoint is /upload or /categories/upload
       const response = await api.post('/categories/upload', uploadData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      // Adjust based on your backend response structure (e.g., response.data.url or path)
       const imageUrl = response.data?.url || response.data?.path || response.data;
       setFormData(prev => ({ ...prev, icon: imageUrl }));
       toast.success('Image uploaded & compressed successfully!');
     } catch (error: any) {
       console.error('Upload error', error);
       toast.error(error?.response?.data?.message || 'Failed to upload image');
+      setLocalPreview(null);
     } finally {
       setUploadingImage(false);
     }
   };
 
-  // Canvas-based image compressor
   const compressImage = (file: File, maxSizeInBytes: number): Promise<File> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -144,7 +111,6 @@ export default function CategoryList() {
           let width = img.width;
           let height = img.height;
 
-          // Resize if too large
           const MAX_WIDTH = 800;
           const MAX_HEIGHT = 800;
           if (width > height) {
@@ -195,9 +161,6 @@ export default function CategoryList() {
     });
   };
 
-  // =====================================================
-  // SUBMIT (CREATE / UPDATE)
-  // =====================================================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.slug.trim()) {
@@ -229,9 +192,6 @@ export default function CategoryList() {
     }
   };
 
-  // =====================================================
-  // DELETE CATEGORY
-  // =====================================================
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this category?')) return;
     
@@ -244,11 +204,9 @@ export default function CategoryList() {
     }
   };
 
-  // =====================================================
-  // OPEN MODALS
-  // =====================================================
   const openEditModal = (category: Category) => {
     setEditingId(category.id);
+    setLocalPreview(null);
     setFormData({
       name: category.name,
       slug: category.slug,
@@ -261,6 +219,7 @@ export default function CategoryList() {
 
   const openNewModal = () => {
     setEditingId(null);
+    setLocalPreview(null);
     setFormData({ name: '', slug: '', icon: '', isActive: true, parentId: '' });
     setIsModalOpen(true);
   };
@@ -283,7 +242,6 @@ export default function CategoryList() {
         </button>
       </div>
 
-      {/* Search */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div className="relative">
           <Search className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -297,7 +255,6 @@ export default function CategoryList() {
         </div>
       </div>
 
-      {/* Categories Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full whitespace-nowrap">
@@ -324,10 +281,14 @@ export default function CategoryList() {
                       <div className="flex items-center">
                         <div className="h-12 w-12 flex-shrink-0 bg-gray-50 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
                           {category.icon ? (
-                            <NgrokWebImage 
+                            <img 
                               src={category.icon.startsWith('http') ? category.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${category.icon.replace(/\s+/g, '%20')}`} 
                               alt={category.name} 
-                              className="h-full w-full object-contain p-1" 
+                              className="h-full w-full object-contain p-1"
+                              onError={(e) => {
+                                // Agar image block hoti hai (jaise pehli baar ngrok link kholne se pehle)
+                                (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${category.name}&background=f3f4f6&color=9ca3af`;
+                              }}
                             />
                           ) : (
                             <span className="text-gray-400 text-xs">No img</span>
@@ -370,7 +331,6 @@ export default function CategoryList() {
         </div>
       </div>
 
-      {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
@@ -408,7 +368,6 @@ export default function CategoryList() {
                 />
               </div>
 
-              {/* Parent Category Dropdown */}
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">Parent Category (Optional)</label>
                 <select
@@ -428,7 +387,6 @@ export default function CategoryList() {
                 <p className="text-xs text-gray-500 mt-1">Select a main category if you want to make this a Sub-Category.</p>
               </div>
 
-              {/* Direct File Upload instead of raw text URL */}
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">Category Icon / Image</label>
                 <div className="flex items-center gap-3">
@@ -448,16 +406,18 @@ export default function CategoryList() {
                     />
                   </label>
                 </div>
-                {formData.icon && (
+                
+                {(localPreview || formData.icon) && (
                   <div className="mt-2 flex items-center gap-2">
-                    <NgrokWebImage 
-                      src={formData.icon.startsWith('http') ? formData.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${formData.icon.replace(/\s+/g, '%20')}`} 
+                    <img 
+                      src={localPreview || (formData.icon.startsWith('http') ? formData.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${formData.icon.replace(/\s+/g, '%20')}`)} 
                       alt="Preview" 
-                      className="w-10 h-10 object-contain rounded border bg-white" 
+                      className="w-10 h-10 object-contain rounded border" 
                     />
                     <span className="text-xs text-green-600 font-medium">Image uploaded successfully!</span>
                   </div>
                 )}
+                
                 <p className="text-xs text-gray-500 mt-1">Select an image from your computer; it will automatically compress under 100KB.</p>
               </div>
 
