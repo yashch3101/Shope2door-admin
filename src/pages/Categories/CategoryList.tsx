@@ -303,7 +303,7 @@ export default function CategoryList() {
                       <div className="flex items-center">
                         <div className="h-12 w-12 flex-shrink-0 bg-gray-50 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
                           {category.icon ? (
-                            <img src={category.icon.startsWith('http') ? category.icon : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${category.icon}`} alt={category.name} className="h-full w-full object-contain p-1" />
+                            <img src={category.icon.startsWith('http') ? category.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${category.icon.replace(/\s+/g, '%20')}`} alt={category.name} className="h-full w-full object-contain p-1" />
                           ) : (
                             <span className="text-gray-400 text-xs">No img</span>
                           )}
@@ -426,7 +426,7 @@ export default function CategoryList() {
                 {formData.icon && (
                   <div className="mt-2 flex items-center gap-2">
                     <img 
-                      src={formData.icon.startsWith('http') ? formData.icon : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${formData.icon}`} 
+                      src={formData.icon.startsWith('http') ? formData.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${formData.icon.replace(/\s+/g, '%20')}`} 
                       alt="Preview" 
                       className="w-10 h-10 object-contain rounded border" 
                     />
