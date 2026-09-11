@@ -3,6 +3,37 @@ import { Plus, Edit, Trash2, Search, X, Upload } from 'lucide-react';
 import { api } from '../../services/api';
 import toast from 'react-hot-toast';
 
+const NgrokImage = ({ src, alt, className }: { src: string, alt?: string, className?: string }) => {
+  const [imgBlob, setImgBlob] = useState<string>('');
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!src) return;
+    
+    if (!src.includes('ngrok-free.dev')) {
+      setImgBlob(src);
+      return;
+    }
+
+    fetch(src, {
+      headers: { 'ngrok-skip-browser-warning': 'true' }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Failed');
+        return res.blob();
+      })
+      .then(blob => {
+        setImgBlob(URL.createObjectURL(blob));
+      })
+      .catch(() => setError(true));
+  }, [src]);
+
+  if (error || !imgBlob) {
+    return <div className={`flex items-center justify-center bg-gray-100 text-gray-400 text-xs ${className}`}>No Img</div>;
+  }
+  return <img src={imgBlob} alt={alt} className={className} />;
+};
+
 interface Category {
   id: string;
   name: string;
@@ -303,7 +334,11 @@ export default function CategoryList() {
                       <div className="flex items-center">
                         <div className="h-12 w-12 flex-shrink-0 bg-gray-50 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
                           {category.icon ? (
-                            <img src={category.icon.startsWith('http') ? category.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${category.icon.replace(/\s+/g, '%20')}`} alt={category.name} className="h-full w-full object-contain p-1" />
+                            <NgrokImage 
+                              src={category.icon.startsWith('http') ? category.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${category.icon.replace(/\s+/g, '%20')}`} 
+                              alt={category.name} 
+                              className="h-full w-full object-contain p-1" 
+                            />
                           ) : (
                             <span className="text-gray-400 text-xs">No img</span>
                           )}
@@ -425,7 +460,7 @@ export default function CategoryList() {
                 </div>
                 {formData.icon && (
                   <div className="mt-2 flex items-center gap-2">
-                    <img 
+                    <NgrokImage 
                       src={formData.icon.startsWith('http') ? formData.icon.replace(/\s+/g, '%20') : `https://drop-down-underwire-impulse.ngrok-free.dev/api/v1/uploads/${formData.icon.replace(/\s+/g, '%20')}`} 
                       alt="Preview" 
                       className="w-10 h-10 object-contain rounded border" 
