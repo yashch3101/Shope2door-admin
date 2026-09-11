@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Search, X, Image as ImageIcon } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, X, Image as ImageIcon, Upload } from 'lucide-react';
 import { api } from '../../services/api';
 import toast from 'react-hot-toast';
 
 interface Product {
   id: string;
   name: string;
+  slug?: string;
   sku?: string;
   price: number;
   mrp: number;
@@ -21,6 +22,16 @@ interface Product {
 
 const API_BASE_URL = 'https://drop-down-underwire-impulse.ngrok-free.dev/api/v1'; 
 
+// =====================================================
+// HELPER: GET ADMIN IMAGE URL
+// =====================================================
+const getAdminImageUrl = (path?: string | null) => {
+  if (!path) return '';
+  if (path.startsWith('http')) return path.replace(/\s+/g, '%20');
+  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+  return `${API_BASE_URL}/uploads/${cleanPath}`.replace(/\s+/g, '%20');
+};
+
 export default function ProductList() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -31,10 +42,15 @@ export default function ProductList() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Image Upload States
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
 
-  // Form State
+  // Form State (Slug added here)
   const [formData, setFormData] = useState({
     name: '',
+    slug: '',
     sku: '',
     price: 0,
     mrp: 0,
@@ -55,7 +71,7 @@ export default function ProductList() {
       setLoading(true);
       const response = await api.get('/products/admin/all');
       const resData = response.data;
-      
+
       let items: Product[] = [];
       if (resData?.data?.products && Array.isArray(resData.data.products)) {
         items = resData.data.products;
@@ -99,12 +115,99 @@ export default function ProductList() {
   }, []);
 
   // =====================================================
+  // AUTO GENERATE SLUG
+  // =====================================================
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const name = e.target.value;
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    setFormData({ ...formData, name, slug });
+  };
+
+  // =====================================================
+  // IMAGE COMPRESSION & UPLOAD HELPER (< 100KB)
+  // =====================================================
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    try {
+      const compressedFile = await compressImage(file, 100 * 1024); 
+      setLocalPreview(URL.createObjectURL(compressedFile));
+
+      const uploadData = new FormData();
+      uploadData.append('file', compressedFile);
+
+      // Using the same upload endpoint as categories to store images in /uploads
+      const response = await api.post('/categories/upload', uploadData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const imageUrl = response.data?.url || response.data?.path || response.data;
+      setFormData(prev => ({ ...prev, image: imageUrl }));
+      toast.success('Image uploaded successfully!');
+    } catch (error: any) {
+      console.error('Upload error', error);
+      toast.error(error?.response?.data?.message || 'Failed to upload image');
+      setLocalPreview(null);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const compressImage = (file: File, maxSizeInBytes: number): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          if (width > height) {
+            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+          } else {
+            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          let quality = 0.9;
+          const evaluateQuality = () => {
+            canvas.toBlob((blob) => {
+                if (!blob) { reject(new Error('Canvas is empty')); return; }
+                if (blob.size <= maxSizeInBytes || quality <= 0.1) {
+                  resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+                } else {
+                  quality -= 0.1;
+                  evaluateQuality();
+                }
+              }, 'image/jpeg', quality
+            );
+          };
+          evaluateQuality();
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  // =====================================================
   // SUBMIT (CREATE / UPDATE)
   // =====================================================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      toast.error('Product name is required');
+    if (!formData.name.trim() || !formData.slug.trim()) {
+      toast.error('Product name and slug are required');
       return;
     }
     if (!formData.categoryId) {
@@ -114,6 +217,7 @@ export default function ProductList() {
 
     const payload = {
       name: formData.name,
+      slug: formData.slug,
       sku: formData.sku,
       price: Number(formData.price),
       mrp: Number(formData.mrp),
@@ -150,7 +254,7 @@ export default function ProductList() {
   // =====================================================
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this product?')) return;
-    
+
     try {
       await api.delete(`/products/${id}`);
       toast.success('Product deleted successfully');
@@ -165,8 +269,10 @@ export default function ProductList() {
   // =====================================================
   const openEditModal = (product: Product) => {
     setEditingId(product.id);
+    setLocalPreview(null);
     setFormData({
       name: product.name || '',
+      slug: product.slug || product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
       sku: product.sku || '',
       price: product.price || 0,
       mrp: product.mrp || 0,
@@ -183,17 +289,9 @@ export default function ProductList() {
 
   const openNewModal = () => {
     setEditingId(null);
-    setFormData({ name: '', sku: '', price: 0, mrp: 0, stock: 0, weight: '', categoryId: '', image: '', isActive: true, isFeatured: false, isEssential: false });
+    setLocalPreview(null);
+    setFormData({ name: '', slug: '', sku: '', price: 0, mrp: 0, stock: 0, weight: '', categoryId: '', image: '', isActive: true, isFeatured: false, isEssential: false });
     setIsModalOpen(true);
-  };
-
-  // =====================================================
-  // HELPER: GET IMAGE URL
-  // =====================================================
-  const getImageUrl = (images?: string[]) => {
-    if (!images || images.length === 0) return null;
-    const img = images[0];
-    return img.startsWith('http') ? img : `${API_BASE_URL}/${img}`;
   };
 
   const filteredProducts = Array.isArray(products) ? products.filter((p) => 
@@ -261,11 +359,24 @@ export default function ProductList() {
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         <div className="h-10 w-10 flex-shrink-0 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden flex items-center justify-center">
-                          {getImageUrl(product.images) ? (
-                            <img src={getImageUrl(product.images)!} alt={product.name} className="h-full w-full object-contain p-1" />
-                          ) : (
-                            <ImageIcon className="text-gray-300 w-5 h-5" />
-                          )}
+                          {/* YAHAN HUMNE NAYA HELPER USE KIYA HAI IMAGE RENDER KE LIYE */}
+                          {(() => {
+                            const imgPath = product.images && product.images.length > 0 ? product.images[0] : null;
+                            const finalUri = getAdminImageUrl(imgPath);
+                            if (finalUri) {
+                              return (
+                                <img 
+                                  src={finalUri} 
+                                  alt={product.name} 
+                                  className="h-full w-full object-contain p-1" 
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=${product.name}&background=f3f4f6&color=9ca3af`;
+                                  }}
+                                />
+                              );
+                            }
+                            return <ImageIcon className="text-gray-300 w-5 h-5" />;
+                          })()}
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">{product.name}</div>
@@ -341,17 +452,27 @@ export default function ProductList() {
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">Product ko kis sub-category (jaise Burgers) mein daalna hai yahan se select karein.</p>
                 </div>
-                
-                {/* Product Name - Full Width */}
+
+                {/* Product Name */}
                 <div className="md:col-span-2">
                   <label className="block text-sm font-bold text-gray-700 mb-1">Product Name</label>
                   <input 
                     type="text" required value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    onChange={handleNameChange}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none"
                     placeholder="e.g. Britannia Good Day"
+                  />
+                </div>
+
+                {/* Slug (Auto Generated) */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Slug (Auto-generated)</label>
+                  <input 
+                    type="text" required value={formData.slug}
+                    onChange={(e) => setFormData({...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-')})}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none bg-gray-50"
+                    placeholder="britannia-good-day"
                   />
                 </div>
 
@@ -407,6 +528,39 @@ export default function ProductList() {
                   />
                 </div>
 
+                {/* Product Image Upload */}
+                <div className="md:col-span-2 mt-2">
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Product Image</label>
+                  <div className="flex items-center gap-3">
+                    <label className="flex-1 flex flex-col items-center justify-center px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-yellow-500 bg-gray-50 transition-colors">
+                      <div className="flex items-center space-x-2">
+                        <Upload className="w-5 h-5 text-gray-400" />
+                        <span className="text-sm font-medium text-gray-600">
+                          {uploadingImage ? 'Compressing & Uploading...' : 'Choose image file (< 100KB)'}
+                        </span>
+                      </div>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleImageUpload} 
+                        className="hidden" 
+                        disabled={uploadingImage}
+                      />
+                    </label>
+                  </div>
+                  
+                  {(localPreview || formData.image) && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <img 
+                        src={localPreview || getAdminImageUrl(formData.image)} 
+                        alt="Preview" 
+                        className="w-10 h-10 object-contain rounded border bg-gray-50" 
+                      />
+                      <span className="text-xs text-green-600 font-medium">Image ready!</span>
+                    </div>
+                  )}
+                </div>
+
                 {/* Status Toggles - Full Width */}
                 <div className="md:col-span-2 flex flex-wrap gap-6 pt-4 border-t border-gray-100 mt-2">
                   <div className="flex items-center">
@@ -443,17 +597,6 @@ export default function ProductList() {
                   </div>
                 </div>
 
-                {/* Image URL - Full Width */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Product Image URL</label>
-                  <input 
-                    type="text" value={formData.image}
-                    onChange={(e) => setFormData({...formData, image: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 outline-none"
-                    placeholder="https://example.com/image.jpg"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Provide a valid image URL for the product.</p>
-                </div>
               </form>
             </div>
 
@@ -469,7 +612,7 @@ export default function ProductList() {
               <button 
                 type="submit"
                 form="productForm"
-                disabled={isSubmitting}
+                disabled={isSubmitting || uploadingImage}
                 className="flex-1 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-bold transition-colors disabled:opacity-50"
               >
                 {isSubmitting ? 'Saving...' : 'Save Product'}
