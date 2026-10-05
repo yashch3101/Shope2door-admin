@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://40.40.29.169:3000/api/v1'; // Backend URL
+const API_BASE_URL = 'https://drop-down-underwire-impulse.ngrok-free.dev/api/v1'; // Backend URL
 
 export const api = axios.create({
   baseURL: API_BASE_URL,

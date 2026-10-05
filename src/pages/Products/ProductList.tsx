@@ -20,7 +20,7 @@ interface Product {
   images?: string[];
 }
 
-const API_BASE_URL = 'http://40.40.29.169:3000/api/v1'; 
+const API_BASE_URL = 'https://drop-down-underwire-impulse.ngrok-free.dev/api/v1'; 
 
 // =====================================================
 // HELPER: GET ADMIN IMAGE URL
