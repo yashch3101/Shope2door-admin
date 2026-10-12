@@ -4,7 +4,7 @@ import { api } from '../../services/api';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 
-const API_BASE_URL = 'https://drop-down-underwire-impulse.ngrok-free.dev/api/v1';
+const API_BASE_URL = 'http://129.121.171.21:3000/api/v1';
 
 interface OrderItem {
   id: string;
