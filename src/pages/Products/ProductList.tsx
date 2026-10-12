@@ -20,7 +20,7 @@ interface Product {
   images?: string[];
 }
 
-const API_BASE_URL = 'http://129.121.171.21:3000/api/v1'; 
+const API_BASE_URL = 'https://shope2door-api.duckdns.org/api/v1'; 
 
 // =====================================================
 // HELPER: GET ADMIN IMAGE URL
